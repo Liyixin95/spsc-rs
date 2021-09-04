@@ -1,47 +1,62 @@
 use std::mem::MaybeUninit;
+use std::sync::atomic::AtomicUsize;
 
-pub struct Ring<T> {
+pub struct SimpleRing<T> {
     array: Box<[MaybeUninit<T>]>,
     capacity: usize,
-    read: usize,
-    write: usize,
+    mask: usize,
+    consumer_pos: usize,
+    producer_pos: usize,
 }
 
-impl<T> Ring<T> {
+impl<T> Drop for SimpleRing<T> {
+    fn drop(&mut self) {
+        while let Some(t) = self.try_pop() {
+            std::mem::drop(t)
+        }
+    }
+}
+
+impl<T> SimpleRing<T> {
     pub fn with_capacity(size: usize) -> Self {
         let array = (0..size)
             .map(|_| MaybeUninit::uninit())
             .collect();
+        let capacity = size.checked_next_power_of_two().expect("invalid capacity");
         Self {
             array,
-            capacity: size,
-            read: 0,
-            write: 0
+            capacity,
+            mask: capacity - 1,
+            consumer_pos: 0,
+            producer_pos: 0,
         }
     }
 
     pub fn next(&mut self) -> Option<usize> {
-        self.write += 1;
-        let warp_point = self.write - self.capacity;
-        if warp_point > self.read {
-            Some(self.write & (self.capacity - 1))
+        let next = self.producer_pos.overflowing_add(1).0;
+        self.producer_pos = next;
+        let warp_point = next.overflowing_sub(self.capacity).0;
+        if warp_point >= self.consumer_pos {
+            Some(next & self.mask)
         } else {
             return None
         }
     }
 
-    pub unsafe fn push(&mut self, pos: usize, t: T) {
+    pub(crate) unsafe fn set(&mut self, pos: usize, t: T) {
         let ptr = self.array.get_unchecked_mut(pos);
         *ptr = MaybeUninit::new(t);
     }
 
-    pub fn try_pop(&mut self) -> Option<T> {
-        if self.read == self.write {
+    pub(crate) fn try_pop(&mut self) -> Option<T> {
+        let read = self.consumer_pos;
+        if read == self.producer_pos {
             return None;
         } else {
-            self.read += 1;
             unsafe {
-                let ptr = self.array.get_unchecked(self.read & (self.capacity - 1)).as_ptr();
+                let pos = read.overflowing_add(1).0;
+                self.consumer_pos = pos;
+                let ptr = self.array.get_unchecked(pos & self.mask).as_ptr();
                 Some(ptr.read())
             }
         }
