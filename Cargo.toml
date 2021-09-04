@@ -1,0 +1,22 @@
+[package]
+name = "ring-rs"
+version = "0.1.0"
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+futures = { version = "*", default-features = false }
+cache-padded = "*"
+
+[dev-dependencies]
+tokio = { version = "*", features = ["full"] }
+criterion = { version = "*", features = ["async_futures"] }
+
+#[[bench]]
+#name = "spsc_bench"
+#harness = false
+
+[[bench]]
+name = "tagged_bench"
+harness = false
