@@ -23,7 +23,7 @@ fn seq_test(amt: u32, cap: usize) {
     t.join().unwrap();
 }
 
-async fn send_sequence(n: u32, mut sender: spsc::ArraySender<u32>) {
+async fn send_sequence(n: u32, mut sender: spsc::BoundedSender<u32>) {
     for x in 0..n {
         sender.send(x).await.unwrap();
     }

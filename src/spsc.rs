@@ -33,10 +33,10 @@ impl<T, R> Shared<T, R> {
     }
 }
 
-pub type ArraySender<T> = Sender<T, BoundedRing<T>>;
-pub type ArrayReceiver<T> = Receiver<T, BoundedRing<T>>;
+pub type BoundedSender<T> = Sender<T, BoundedRing<T>>;
+pub type BoundedReceiver<T> = Receiver<T, BoundedRing<T>>;
 
-pub fn channel<T>(size: usize) -> (Sender<T, BoundedRing<T>>, Receiver<T, BoundedRing<T>>) {
+pub fn channel<T>(size: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
     let ring = BoundedRing::with_capacity(size);
     let shared = Arc::new(Shared::new(ring));
     (
