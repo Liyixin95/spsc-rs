@@ -1,64 +1,162 @@
+use crate::raw_ring::inner::AtomicPos;
+use core::cmp;
+use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
-use std::sync::atomic::AtomicUsize;
+use std::slice::from_raw_parts_mut;
+use std::sync::atomic::Ordering;
 
-pub struct SimpleRing<T> {
-    array: Box<[MaybeUninit<T>]>,
-    capacity: usize,
+#[cfg(feature = "cache-padded")]
+mod inner {
+    use cache_padded::CachePadded;
+    use core::ops::Deref;
+    use std::sync::atomic::AtomicUsize;
+
+    #[derive(Default)]
+    pub(crate) struct AtomicPos {
+        inner: CachePadded<AtomicUsize>,
+    }
+
+    impl Deref for AtomicPos {
+        type Target = AtomicUsize;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+}
+
+#[cfg(not(feature = "cache-padded"))]
+mod inner {
+    use core::ops::Deref;
+    use std::sync::atomic::AtomicUsize;
+
+    #[derive(Default)]
+    pub(crate) struct AtomicPos {
+        inner: AtomicUsize,
+    }
+
+    impl Deref for AtomicPos {
+        type Target = AtomicUsize;
+
+        fn deref(&self) -> &Self::Target {
+            &self.inner
+        }
+    }
+}
+
+pub(crate) struct RawRing<T> {
+    buf: Box<[UnsafeCell<MaybeUninit<T>>]>,
+    cap: usize,
     mask: usize,
-    consumer_pos: usize,
-    producer_pos: usize,
+    producer_pos: AtomicPos,
+    consumer_pos: AtomicPos,
 }
 
-impl<T> Drop for SimpleRing<T> {
+impl<T> Drop for RawRing<T> {
     fn drop(&mut self) {
-        while let Some(t) = self.try_pop() {
-            std::mem::drop(t)
+        unsafe {
+            let (left, right) = self.as_mut_slice();
+            std::ptr::drop_in_place(right);
+            std::ptr::drop_in_place(left);
         }
     }
 }
 
-impl<T> SimpleRing<T> {
-    pub fn with_capacity(size: usize) -> Self {
-        let array = (0..size)
-            .map(|_| MaybeUninit::uninit())
+impl<T> RawRing<T> {
+    pub(crate) fn with_capacity(cap: usize) -> Self {
+        let cap = cmp::max(cap + 1, 2)
+            .checked_next_power_of_two()
+            .expect("capacity overflow");
+
+        let buf = (0..cap)
+            .map(|_| UnsafeCell::new(MaybeUninit::uninit()))
             .collect();
-        let capacity = size.checked_next_power_of_two().expect("invalid capacity");
         Self {
-            array,
-            capacity,
-            mask: capacity - 1,
-            consumer_pos: 0,
-            producer_pos: 0,
+            buf,
+            consumer_pos: Default::default(),
+            producer_pos: Default::default(),
+            mask: cap - 1,
+            cap,
         }
     }
 
-    pub fn next(&mut self) -> Option<usize> {
-        let next = self.producer_pos.overflowing_add(1).0;
-        self.producer_pos = next;
-        let warp_point = next.overflowing_sub(self.capacity).0;
-        if warp_point >= self.consumer_pos {
-            Some(next & self.mask)
-        } else {
-            return None
-        }
+    pub(crate) fn len(&self) -> usize {
+        let diff = self.producer_pos().wrapping_sub(self.consumer_pos());
+        self.index(diff)
     }
 
-    pub(crate) unsafe fn set(&mut self, pos: usize, t: T) {
-        let ptr = self.array.get_unchecked_mut(pos);
-        *ptr = MaybeUninit::new(t);
+    pub(crate) fn is_empty(&self) -> bool {
+        self.consumer_pos() == self.producer_pos()
     }
 
-    pub(crate) fn try_pop(&mut self) -> Option<T> {
-        let read = self.consumer_pos;
-        if read == self.producer_pos {
-            return None;
+    pub(crate) fn producer_idx(&self) -> usize {
+        self.index(self.producer_pos())
+    }
+
+    pub(crate) fn consumer_idx(&self) -> usize {
+        self.index(self.consumer_pos())
+    }
+
+    pub(crate) fn index(&self, pos: usize) -> usize {
+        pos & self.mask
+    }
+
+    pub(crate) fn capacity(&self) -> usize {
+        self.cap
+    }
+
+    pub(crate) unsafe fn buffer_read(&self, idx: usize) -> T {
+        let ptr = self.buf.as_ptr();
+        let ptr = ptr.add(idx);
+        let cell = core::ptr::read(ptr);
+        cell.into_inner().assume_init()
+    }
+
+    pub(crate) unsafe fn buffer_write(&self, idx: usize, value: T) {
+        let ptr = self.buf.get_unchecked(idx).get();
+        ptr.write(MaybeUninit::new(value))
+    }
+
+    pub(crate) fn next_producer_pos(&self, off: usize) -> usize {
+        let now = self.producer_pos.load(Ordering::Acquire);
+        let next = now + off;
+        self.producer_pos.store(next, Ordering::Release);
+        next
+    }
+
+    pub(crate) fn next_consumer_pos(&self, off: usize) -> usize {
+        let now = self.consumer_pos.load(Ordering::Acquire);
+        let next = now + off;
+        self.consumer_pos.store(next, Ordering::Release);
+        next
+    }
+
+    pub(crate) fn consumer_pos(&self) -> usize {
+        self.consumer_pos.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn producer_pos(&self) -> usize {
+        self.producer_pos.load(Ordering::Acquire)
+    }
+
+    unsafe fn as_mut_ptr(&mut self) -> *mut T {
+        self.buf.as_mut_ptr().cast()
+    }
+
+    unsafe fn as_mut_slice(&mut self) -> (&mut [T], &mut [T]) {
+        let contiguous = self.consumer_pos() <= self.producer_pos();
+        let ptr = self.as_mut_ptr();
+        if contiguous {
+            let empty = from_raw_parts_mut(ptr, 0);
+            let len = self.producer_pos() - self.consumer_pos() + 1;
+            let buf = from_raw_parts_mut(ptr.add(self.consumer_pos()), len);
+            (buf, empty)
         } else {
-            unsafe {
-                let pos = read.overflowing_add(1).0;
-                self.consumer_pos = pos;
-                let ptr = self.array.get_unchecked(pos & self.mask).as_ptr();
-                Some(ptr.read())
-            }
+            let p_idx = self.producer_idx();
+            let c_idx = self.consumer_idx();
+            let left = from_raw_parts_mut(ptr, p_idx);
+            let right = from_raw_parts_mut(ptr.add(c_idx), self.cap - c_idx);
+            (left, right)
         }
     }
 }

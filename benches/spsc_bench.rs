@@ -1,36 +1,91 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use criterion::async_executor::FuturesExecutor;
-use ring_rs::spsc as ring_spsc;
+use futures_util::StreamExt;
+use ring_rs::{spsc as ring_spsc, spsc};
+use tokio::runtime::Runtime;
 use tokio::sync::mpsc as tokio_mpsc;
-use futures::future::poll_fn;
 
-const SIZE: usize = 32;
-
-async fn bench_ring() {
-    let (mut tx, rx) = ring_spsc::channel(SIZE);
-    for i in 0..SIZE {
-        poll_fn(|cx| tx.poll_send(i, cx)).await;
-    }
-
-    std::mem::drop(rx)
+fn rt() -> Runtime {
+    tokio::runtime::Builder::new_multi_thread().build().unwrap()
 }
 
-pub fn ring_spsc(c: &mut Criterion) {
-    c.bench_function("ring spsc", |b| b.to_async(FuturesExecutor).iter(bench_ring));
+fn no_contention_spsc(c: &mut Criterion) {
+    let rt = rt();
+    c.bench_function("ring spsc", |b| {
+        b.iter(|| {
+            let (mut tx, mut rx) = spsc::channel(4096);
+
+            let _ = rt.block_on(async move {
+                for i in 0..4096 {
+                    tx.send(i).await.unwrap();
+                }
+            });
+
+            let _ = rt.block_on(async move {
+                for _ in 0..4096 {
+                    rx.next().await;
+                }
+            });
+        })
+    });
 }
 
-async fn bench_tokio() {
-    let (tx, rx) = tokio_mpsc::channel(SIZE);
-    for i in 0..SIZE {
-        tx.send(i).await;
-    }
+fn no_contention_mpsc(c: &mut Criterion) {
+    let rt = rt();
+    c.bench_function("tokio channel", |b| {
+        b.iter(|| {
+            let (mut tx, mut rx) = tokio_mpsc::channel(4096);
 
-    std::mem::drop(rx)
+            let _ = rt.block_on(async move {
+                for i in 0..4096 {
+                    tx.send(i).await.unwrap();
+                }
+            });
+
+            let _ = rt.block_on(async move {
+                for _ in 0..4096 {
+                    rx.recv().await;
+                }
+            });
+        })
+    });
 }
 
-pub fn tokio_channel(c: &mut Criterion) {
-    c.bench_function("tokio channel", |b| b.to_async(FuturesExecutor).iter(bench_tokio));
+fn contention_spsc(c: &mut Criterion) {
+    c.bench_function("contention ring spsc", |b| {
+        b.to_async(rt()).iter(|| async move {
+            let (mut tx, mut rx) = spsc::channel(4096);
+
+            tokio::spawn(async move {
+                for i in 0..4096 {
+                    tx.send(i).await.unwrap();
+                }
+            });
+
+            for _ in 0..4096 {
+                rx.next().await;
+            }
+        })
+    });
 }
 
-criterion_group!(benches, ring_spsc, tokio_channel);
-criterion_main!(benches);
+fn contention_mpsc(c: &mut Criterion) {
+    c.bench_function("contention mpsc", |b| {
+        b.to_async(rt()).iter(|| async move {
+            let (mut tx, mut rx) = tokio_mpsc::channel(4096);
+
+            tokio::spawn(async move {
+                for i in 0..4096 {
+                    tx.send(i).await.unwrap();
+                }
+            });
+
+            for _ in 0..4096 {
+                rx.recv().await;
+            }
+        })
+    });
+}
+
+criterion_group!(uncontention, no_contention_spsc, no_contention_mpsc);
+criterion_group!(contention, contention_spsc, contention_mpsc);
+criterion_main!(uncontention, contention);

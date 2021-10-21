@@ -1,22 +1,17 @@
 [package]
-name = "ring-rs"
+name = "spsc-rs"
 version = "0.1.0"
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures = { version = "*", default-features = false }
-cache-padded = "*"
+futures-util = { version = "0.3.17", default-features = false }
+cache-padded = { version = "1.1.1", optional = true }
 
 [dev-dependencies]
-tokio = { version = "*", features = ["full"] }
-criterion = { version = "*", features = ["async_futures"] }
-
-#[[bench]]
-#name = "spsc_bench"
-#harness = false
+criterion = { version = "0.3.5", features = ["async_tokio"] }
 
 [[bench]]
-name = "tagged_bench"
+name = "spsc_bench"
 harness = false

@@ -1,13 +1,13 @@
-pub mod raw_ring;
-pub mod ptr_ring;
-pub(crate) mod raw1_ring;
+mod atomic_waker;
+pub mod error;
+mod raw_ring;
+mod simple_ring;
 pub mod spsc;
 
-pub(crate) trait Ring<T> {
-    fn next(&mut self) -> Option<usize>;
+pub trait Ring<T> {
+    fn next_idx(&self) -> Option<usize>;
 
-    fn try_pop(&mut self) ->Option<T>;
+    fn try_pop(&self) -> Option<T>;
 
-    unsafe fn set(&mut self, t: T, pos: usize);
+    unsafe fn set(&self, t: T, idx: usize);
 }
-
