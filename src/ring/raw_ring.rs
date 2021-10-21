@@ -1,4 +1,4 @@
-use crate::raw_ring::inner::AtomicPos;
+use self::inner::AtomicPos;
 use core::cmp;
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;

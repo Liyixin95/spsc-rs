@@ -1,7 +1,7 @@
 use crate::atomic_waker::AtomicWaker;
 use crate::error::{SendError, TrySendError};
-use crate::simple_ring::SimpleRing;
-use crate::Ring;
+use crate::ring::BoundedRing;
+use crate::ring::Ring;
 use futures_util::future::poll_fn;
 use futures_util::Stream;
 use std::marker::PhantomData;
@@ -33,11 +33,11 @@ impl<T, R> Shared<T, R> {
     }
 }
 
-pub type ArraySender<T> = Sender<T, SimpleRing<T>>;
-pub type ArrayReceiver<T> = Receiver<T, SimpleRing<T>>;
+pub type ArraySender<T> = Sender<T, BoundedRing<T>>;
+pub type ArrayReceiver<T> = Receiver<T, BoundedRing<T>>;
 
-pub fn channel<T>(size: usize) -> (Sender<T, SimpleRing<T>>, Receiver<T, SimpleRing<T>>) {
-    let ring = SimpleRing::with_capacity(size);
+pub fn channel<T>(size: usize) -> (Sender<T, BoundedRing<T>>, Receiver<T, BoundedRing<T>>) {
+    let ring = BoundedRing::with_capacity(size);
     let shared = Arc::new(Shared::new(ring));
     (
         Sender {

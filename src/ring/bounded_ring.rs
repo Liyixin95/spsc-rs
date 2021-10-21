@@ -1,11 +1,11 @@
-use crate::raw_ring::RawRing;
-use crate::Ring;
+use super::raw_ring::RawRing;
+use super::Ring;
 
-pub struct SimpleRing<T> {
+pub struct BoundedRing<T> {
     buf: RawRing<T>,
 }
 
-impl<T> Ring<T> for SimpleRing<T> {
+impl<T> Ring<T> for BoundedRing<T> {
     fn next_idx(&self) -> Option<usize> {
         if self.buf.capacity() - self.buf.len() == 1 {
             None
@@ -17,7 +17,7 @@ impl<T> Ring<T> for SimpleRing<T> {
 
     fn try_pop(&self) -> Option<T> {
         if self.buf.is_empty() {
-            return None;
+            None
         } else {
             unsafe {
                 let idx = self.buf.consumer_idx();
@@ -33,7 +33,7 @@ impl<T> Ring<T> for SimpleRing<T> {
     }
 }
 
-impl<T> SimpleRing<T> {
+impl<T> BoundedRing<T> {
     pub fn with_capacity(size: usize) -> Self {
         let buf = RawRing::with_capacity(size);
         Self { buf }
