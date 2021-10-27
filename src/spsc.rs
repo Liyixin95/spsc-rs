@@ -53,11 +53,46 @@ pub struct Sender<T, R> {
 
 impl<T, R> Drop for Sender<T, R> {
     fn drop(&mut self) {
+        // we need to wake up the receiver before
+        // the sender was totally dropped, otherwise the receiver may hang up.
         self.inner.consumer.wake_by_ref();
     }
 }
 
 impl<T, R: Ring<T>> Sender<T, R> {
+    pub fn start_send(&mut self, item: T) -> Result<(), SendError> {
+        if let Some(idx) = self.inner.ring.next_idx() {
+            unsafe {
+                self.inner.ring.set(item, idx);
+            }
+            Ok(())
+        } else {
+            Err(SendError::Full)
+        }
+    }
+
+    pub fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), SendError>> {
+        if self.inner.ring.is_full() {
+            self.poll_flush(cx)
+        } else {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    pub fn poll_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), SendError>> {
+        if self.is_closed() {
+            Poll::Ready(Err(SendError::Disconnected))
+        } else if self.inner.ring.is_empty() {
+            // if the inner ring is already empty,
+            // we just return ok to avoid some atomic operation.
+            Poll::Ready(Ok(()))
+        } else {
+            self.inner.producer.register(cx.waker());
+            self.inner.consumer.wake_by_ref();
+            Poll::Pending
+        }
+    }
+
     pub async fn send(&mut self, item: T) -> Result<(), TrySendError<T>> {
         let idx = match poll_fn(|cx| self.poll_next_pos(cx)).await {
             Ok(idx) => idx,
@@ -120,13 +155,14 @@ impl<T, R: Ring<T>> Receiver<T, R> {
         }
     }
 
-    fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
+    pub fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
         if let Poll::Ready(op) = self.poll_next_msg() {
             return Poll::Ready(op);
         }
 
         self.inner.consumer.register(cx.waker());
 
+        // poll again, in case of some item was sent between the registering and the previous poll.
         self.poll_next_msg()
     }
 

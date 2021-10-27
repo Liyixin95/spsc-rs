@@ -6,8 +6,16 @@ pub struct BoundedRing<T> {
 }
 
 impl<T> Ring<T> for BoundedRing<T> {
+    fn is_empty(&self) -> bool {
+        self.buf.len() == 0
+    }
+
+    fn is_full(&self) -> bool {
+        self.buf.capacity() - self.buf.len() == 1
+    }
+
     fn next_idx(&self) -> Option<usize> {
-        if self.buf.capacity() - self.buf.len() == 1 {
+        if self.is_full() {
             None
         } else {
             let next = self.buf.producer_pos();

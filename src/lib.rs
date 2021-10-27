@@ -1,4 +1,9 @@
 mod atomic_waker;
-pub mod error;
+mod error;
 mod ring;
 pub mod spsc;
+pub mod wrapper;
+
+pub use self::error::SendError;
+pub use self::error::TryRecvError;
+pub use self::error::TrySendError;
