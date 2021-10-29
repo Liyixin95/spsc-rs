@@ -2,6 +2,7 @@ use crate::atomic_waker::AtomicWaker;
 use crate::error::{SendError, TrySendError};
 use crate::ring::BoundedRing;
 use crate::ring::Ring;
+use crate::TryRecvError;
 use futures_util::future::poll_fn;
 use futures_util::Stream;
 use std::marker::PhantomData;
@@ -153,6 +154,37 @@ impl<T, R: Ring<T>> Receiver<T, R> {
                 Poll::Ready(Some(item))
             }
         }
+    }
+
+    pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
+        match self.inner.ring.try_pop() {
+            None => {
+                if self.is_closed() {
+                    Err(TryRecvError::Disconnected)
+                } else {
+                    Err(TryRecvError::Empty)
+                }
+            }
+            Some(item) => Ok(item),
+        }
+    }
+
+    pub fn poll_want_recv(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        if self.is_closed() {
+            return Poll::Ready(());
+        }
+
+        self.inner.consumer.register(cx.waker());
+        self.inner.producer.wake_by_ref();
+        if self.inner.ring.is_empty() {
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
+    }
+
+    pub async fn want_recv(&mut self) {
+        poll_fn(|cx| self.poll_want_recv(cx)).await
     }
 
     pub fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {

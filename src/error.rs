@@ -12,10 +12,6 @@ pub struct TrySendError<T> {
     pub(crate) val: T,
 }
 
-pub struct TryRecvError {
-    _priv: (),
-}
-
 impl fmt::Display for SendError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
@@ -71,15 +67,18 @@ impl<T> TrySendError<T> {
     }
 }
 
-impl fmt::Debug for TryRecvError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("TryRecvError").finish()
-    }
+#[derive(Debug)]
+pub enum TryRecvError {
+    Empty,
+    Disconnected,
 }
 
 impl fmt::Display for TryRecvError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "receiver channel is empty")
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            TryRecvError::Empty => "receiving on an empty channel".fmt(fmt),
+            TryRecvError::Disconnected => "receiving on a closed channel".fmt(fmt),
+        }
     }
 }
 
