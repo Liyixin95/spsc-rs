@@ -1,15 +1,15 @@
 use self::inner::AtomicPos;
+use crate::loom::UnsafeCell;
 use core::cmp;
-use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::slice::from_raw_parts_mut;
 use std::sync::atomic::Ordering;
 
 #[cfg(feature = "cache-padded")]
 mod inner {
+    use crate::loom::AtomicUsize;
     use cache_padded::CachePadded;
     use core::ops::Deref;
-    use std::sync::atomic::AtomicUsize;
 
     #[derive(Default)]
     pub(crate) struct AtomicPos {
@@ -27,8 +27,8 @@ mod inner {
 
 #[cfg(not(feature = "cache-padded"))]
 mod inner {
+    use crate::loom::AtomicUsize;
     use core::ops::Deref;
-    use std::sync::atomic::AtomicUsize;
 
     #[derive(Default)]
     pub(crate) struct AtomicPos {
@@ -107,14 +107,13 @@ impl<T> RawRing<T> {
 
     pub(crate) unsafe fn buffer_read(&self, idx: usize) -> T {
         let ptr = self.buf.as_ptr();
-        let ptr = ptr.add(idx);
-        let cell = core::ptr::read(ptr);
-        cell.into_inner().assume_init()
+        let ptr = &*ptr.add(idx);
+        ptr.with(|inner| inner.read().assume_init())
     }
 
     pub(crate) unsafe fn buffer_write(&self, idx: usize, value: T) {
-        let ptr = self.buf.get_unchecked(idx).get();
-        ptr.write(MaybeUninit::new(value))
+        let cell = self.buf.get_unchecked(idx);
+        cell.with_mut(|ptr| ptr.write(MaybeUninit::new(value)));
     }
 
     pub(crate) fn next_producer_pos(&self, off: usize) -> usize {

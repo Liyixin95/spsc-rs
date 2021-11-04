@@ -1,6 +1,6 @@
+use crate::loom::{AtomicU8, Ordering};
 use core::ptr;
 use std::cell::UnsafeCell;
-use std::sync::atomic::{AtomicU8, Ordering};
 use std::task::{RawWaker, RawWakerVTable, Waker};
 
 /// A waker for single producer and single consumer.

@@ -1,9 +1,16 @@
-use futures_executor::block_on;
 use futures_util::SinkExt;
 use spsc_rs::wrapper::SenderWrapper;
 use spsc_rs::{spsc, TryRecvError};
 use std::future::Future;
+use tokio::runtime::Builder;
 use std::thread;
+
+fn block_on<F: Future>(f: F) -> F::Output {
+    let mut builder = Builder::new_current_thread();
+    let rt = builder.build().unwrap();
+
+    rt.block_on(f)
+}
 
 fn receive_test_framework<R, F, Fut1, Fut2>(amt: u32, cap: usize, sender: F, receiver: R)
 where
@@ -48,7 +55,6 @@ async fn try_receive_sequence(amt: u32, mut rx: spsc::BoundedReceiver<u32>) {
         }
     }
     assert_eq!(n, amt);
-    println!("try receive finish");
 }
 
 async fn batch_sequence(n: u32, sender: spsc::BoundedSender<u32>) {
@@ -56,14 +62,12 @@ async fn batch_sequence(n: u32, sender: spsc::BoundedSender<u32>) {
     for x in 0..n {
         sink.feed(x).await.unwrap();
     }
-    println!("batch test iteration finish");
 }
 
 async fn send_sequence(n: u32, mut sender: spsc::BoundedSender<u32>) {
     for x in 0..n {
         sender.send(x).await.unwrap();
     }
-    println!("send test iteration finish");
 }
 
 const COUNT: usize = 100;

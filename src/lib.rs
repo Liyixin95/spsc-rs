@@ -1,5 +1,6 @@
 mod atomic_waker;
 mod error;
+mod loom;
 mod ring;
 pub mod spsc;
 pub mod wrapper;

@@ -1,7 +1,7 @@
 use crate::atomic_waker::AtomicWaker;
 use crate::error::{SendError, TrySendError};
-use crate::ring::BoundedRing;
-use crate::ring::Ring;
+use crate::loom::{AtomicBool, Ordering};
+use crate::ring::{BoundedRing, Ring};
 use crate::TryRecvError;
 use futures_util::future::poll_fn;
 use futures_util::Stream;
@@ -15,6 +15,7 @@ struct Shared<T, R> {
     ring: R,
     consumer: AtomicWaker,
     producer: AtomicWaker,
+    closed: AtomicBool,
 }
 
 unsafe impl<T: Send, R> Send for Sender<T, R> {}
@@ -30,6 +31,7 @@ impl<T, R> Shared<T, R> {
             ring,
             consumer: Default::default(),
             producer: Default::default(),
+            closed: Default::default(),
         }
     }
 }
@@ -56,6 +58,7 @@ impl<T, R> Drop for Sender<T, R> {
     fn drop(&mut self) {
         // we need to wake up the receiver before
         // the sender was totally dropped, otherwise the receiver may hang up.
+        self.inner.closed.store(true, Ordering::Release);
         self.inner.consumer.wake_by_ref();
     }
 }
@@ -109,6 +112,11 @@ impl<T, R: Ring<T>> Sender<T, R> {
         Ok(())
     }
 
+    /// Returns whether this channel is closed.
+    pub fn is_closed(&self) -> bool {
+        self.inner.closed.load(Ordering::Acquire)
+    }
+
     fn poll_next_pos(&mut self, cx: &mut Context<'_>) -> Poll<Result<usize, SendError>> {
         if self.is_closed() {
             return Poll::Ready(Err(SendError::Disconnected));
@@ -120,10 +128,6 @@ impl<T, R: Ring<T>> Sender<T, R> {
             self.inner.producer.register(cx.waker());
             Poll::Pending
         }
-    }
-
-    pub fn is_closed(&self) -> bool {
-        Arc::strong_count(&self.inner) <= 1
     }
 }
 
@@ -140,22 +144,6 @@ impl<T, R: Ring<T>> Stream for Receiver<T, R> {
 }
 
 impl<T, R: Ring<T>> Receiver<T, R> {
-    fn poll_next_msg(&self) -> Poll<Option<T>> {
-        match self.inner.ring.try_pop() {
-            None => {
-                if self.is_closed() {
-                    Poll::Ready(None)
-                } else {
-                    Poll::Pending
-                }
-            }
-            Some(item) => {
-                self.inner.producer.wake_by_ref();
-                Poll::Ready(Some(item))
-            }
-        }
-    }
-
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
         match self.inner.ring.try_pop() {
             None => {
@@ -189,13 +177,25 @@ impl<T, R: Ring<T>> Receiver<T, R> {
 
     pub fn poll_recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
         if let Poll::Ready(op) = self.poll_next_msg() {
-            return Poll::Ready(op);
+            return Poll::Ready(Some(op));
         }
 
         self.inner.consumer.register(cx.waker());
 
-        // poll again, in case of some item was sent between the registering and the previous poll.
-        self.poll_next_msg()
+        // 1. We need to poll again,
+        //    in case of some item was sent between the registering and the previous poll.
+        //
+        // 2. We need to see whether this channel is closed. Because the sender could
+        //    be closed and wake receiver before the register operation, so if we don't check close,
+        //    this method may return Pending and will never be wakeup.
+        if self.is_closed() {
+            match self.poll_next_msg() {
+                Poll::Ready(op) => Poll::Ready(Some(op)),
+                Poll::Pending => Poll::Ready(None),
+            }
+        } else {
+            self.poll_next_msg().map(Some)
+        }
     }
 
     pub async fn recv(&mut self) -> Option<T> {
@@ -203,6 +203,16 @@ impl<T, R: Ring<T>> Receiver<T, R> {
     }
 
     pub fn is_closed(&self) -> bool {
-        Arc::strong_count(&self.inner) <= 1
+        self.inner.closed.load(Ordering::Acquire)
+    }
+
+    fn poll_next_msg(&self) -> Poll<T> {
+        match self.inner.ring.try_pop() {
+            None => Poll::Pending,
+            Some(item) => {
+                self.inner.producer.wake_by_ref();
+                Poll::Ready(item)
+            }
+        }
     }
 }
