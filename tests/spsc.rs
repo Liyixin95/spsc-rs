@@ -2,8 +2,8 @@ use futures_util::SinkExt;
 use spsc_rs::wrapper::SenderWrapper;
 use spsc_rs::{spsc, TryRecvError};
 use std::future::Future;
-use tokio::runtime::Builder;
 use std::thread;
+use tokio::runtime::Builder;
 
 fn block_on<F: Future>(f: F) -> F::Output {
     let mut builder = Builder::new_current_thread();

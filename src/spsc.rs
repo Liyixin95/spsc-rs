@@ -126,7 +126,14 @@ impl<T, R: Ring<T>> Sender<T, R> {
             Poll::Ready(Ok(idx))
         } else {
             self.inner.producer.register(cx.waker());
-            Poll::Pending
+
+            // We need to poll again, in case of the receiver take some items during
+            // the register and the previous poll
+            return if let Some(idx) = self.inner.ring.next_idx() {
+                Poll::Ready(Ok(idx))
+            } else {
+                Poll::Pending
+            };
         }
     }
 }
