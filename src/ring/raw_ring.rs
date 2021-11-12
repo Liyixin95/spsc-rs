@@ -44,6 +44,9 @@ mod inner {
     }
 }
 
+unsafe impl<T: Send> Send for RawRing<T> {}
+unsafe impl<T: Send> Sync for RawRing<T> {}
+
 pub(crate) struct RawRing<T> {
     buf: Box<[UnsafeCell<MaybeUninit<T>>]>,
     cap: usize,

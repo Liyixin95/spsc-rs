@@ -17,12 +17,6 @@ struct Shared<T, R> {
     closed: AtomicBool,
 }
 
-unsafe impl<T: Send, R> Send for Sender<T, R> {}
-unsafe impl<T: Send, R> Sync for Sender<T, R> {}
-
-unsafe impl<T: Send, R> Send for Receiver<T, R> {}
-unsafe impl<T: Send, R> Sync for Receiver<T, R> {}
-
 impl<T, R> Shared<T, R> {
     fn new(ring: R) -> Self {
         Self {

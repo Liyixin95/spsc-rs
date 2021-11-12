@@ -14,6 +14,7 @@ pub(crate) struct AtomicWaker {
 }
 
 unsafe impl Send for AtomicWaker {}
+unsafe impl Sync for AtomicWaker {}
 
 const WAITING: u8 = 0b0;
 const WAKING: u8 = 0b01;
