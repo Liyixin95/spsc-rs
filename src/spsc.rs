@@ -147,8 +147,17 @@ impl<T, R: Ring<T>> Receiver<T, R> {
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
         match self.inner.ring.try_pop() {
             None => {
+                // If there is no item in this ring, we need to
+                // check closed and try pop again.
+                //
+                // Consider this situation:
+                // receiver try pop first, and sender send an item then close.
+                // If we just check closed without pop again, the remaining item will be lost.
                 if self.is_closed() {
-                    Err(TryRecvError::Disconnected)
+                    match self.inner.ring.try_pop() {
+                        None => Err(TryRecvError::Disconnected),
+                        Some(item) => Ok(item),
+                    }
                 } else {
                     Err(TryRecvError::Empty)
                 }
