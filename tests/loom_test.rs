@@ -22,7 +22,7 @@ fn send_try_receive() {
                     Ok(idx) => {
                         assert_eq!(idx, count);
                         count += 1;
-                    },
+                    }
                     Err(TryRecvError::Empty) => rx.want_recv().await,
                     Err(TryRecvError::Disconnected) => break,
                 }
