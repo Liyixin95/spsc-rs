@@ -1,13 +1,12 @@
 use crate::atomic_waker::AtomicWaker;
 use crate::error::{SendError, TrySendError};
-use crate::loom::{AtomicBool, Ordering};
+use crate::loom::{Arc, AtomicBool, Ordering};
 use crate::ring::{BoundedRing, Ring};
 use crate::TryRecvError;
 use futures_util::future::poll_fn;
 use futures_util::Stream;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 struct Shared<T, R> {
@@ -129,11 +128,11 @@ impl<T, R: Ring<T>> Sender<T, R> {
 
             // We need to poll again, in case of the receiver take some items during
             // the register and the previous poll
-            return if let Some(idx) = self.inner.ring.next_idx() {
+            if let Some(idx) = self.inner.ring.next_idx() {
                 Poll::Ready(Ok(idx))
             } else {
                 Poll::Pending
-            };
+            }
         }
     }
 }

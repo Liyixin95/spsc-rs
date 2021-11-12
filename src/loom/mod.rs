@@ -1,22 +1,12 @@
 #[cfg(loom)]
-pub(crate) use loom::sync::atomic::AtomicU8;
+pub(crate) use loom::sync::atomic::*;
 #[cfg(not(loom))]
-pub(crate) use std::sync::atomic::AtomicU8;
+pub(crate) use std::sync::atomic::*;
 
 #[cfg(loom)]
-pub(crate) use loom::sync::atomic::AtomicBool;
+pub(crate) use loom::sync::Arc;
 #[cfg(not(loom))]
-pub(crate) use std::sync::atomic::AtomicBool;
-
-#[cfg(loom)]
-pub(crate) use loom::sync::atomic::AtomicUsize;
-#[cfg(not(loom))]
-pub(crate) use std::sync::atomic::AtomicUsize;
-
-#[cfg(loom)]
-pub(crate) use loom::sync::atomic::Ordering;
-#[cfg(not(loom))]
-pub(crate) use std::sync::atomic::Ordering;
+pub(crate) use std::sync::Arc;
 
 #[cfg(loom)]
 pub(crate) use loom::cell::UnsafeCell;

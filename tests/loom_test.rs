@@ -7,7 +7,6 @@ use spsc_rs::spsc;
 #[test]
 fn send_receive() {
     loom::model(|| {
-        println!("loom");
         let (mut tx, mut rx) = spsc::channel(1);
 
         thread::spawn(move || {
