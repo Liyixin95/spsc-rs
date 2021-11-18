@@ -1,26 +1,26 @@
+mod ring;
+pub mod wrapper;
+
 use crate::atomic_waker::AtomicWaker;
+use crate::bounded::ring::{And, ExactRing, Indexer, P2Ring, Remainder, Ring};
+use crate::error::TryRecvError;
 use crate::error::{SendError, TrySendError};
 use crate::loom::{Arc, AtomicBool, Ordering};
-use crate::ring::{BoundedRing, Ring};
-use crate::TryRecvError;
 use futures_util::future::poll_fn;
 use futures_util::Stream;
-use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-struct Shared<T, R> {
-    _marker: PhantomData<T>,
-    ring: R,
+struct Shared<T, I: Indexer> {
+    ring: Ring<T, I>,
     consumer: AtomicWaker,
     producer: AtomicWaker,
     closed: AtomicBool,
 }
 
-impl<T, R> Shared<T, R> {
-    fn new(ring: R) -> Self {
+impl<T, I: Indexer> Shared<T, I> {
+    fn new(ring: Ring<T, I>) -> Self {
         Self {
-            _marker: Default::default(),
             ring,
             consumer: Default::default(),
             producer: Default::default(),
@@ -29,11 +29,11 @@ impl<T, R> Shared<T, R> {
     }
 }
 
-pub type BoundedSender<T> = Sender<T, BoundedRing<T>>;
-pub type BoundedReceiver<T> = Receiver<T, BoundedRing<T>>;
+pub type P2Sender<T> = Sender<T, And>;
+pub type P2Receiver<T> = Receiver<T, And>;
 
-pub fn channel<T>(size: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
-    let ring = BoundedRing::with_capacity(size);
+pub fn channel<T>(size: usize) -> (P2Sender<T>, P2Receiver<T>) {
+    let ring = P2Ring::with_capacity(size);
     let shared = Arc::new(Shared::new(ring));
     (
         Sender {
@@ -43,11 +43,25 @@ pub fn channel<T>(size: usize) -> (BoundedSender<T>, BoundedReceiver<T>) {
     )
 }
 
-pub struct Sender<T, R> {
-    inner: Arc<Shared<T, R>>,
+pub type ExactSender<T> = Sender<T, Remainder>;
+pub type ExactReceiver<T> = Receiver<T, Remainder>;
+
+pub fn exact_channel<T>(size: usize) -> (ExactSender<T>, ExactReceiver<T>) {
+    let ring = ExactRing::with_capacity(size);
+    let shared = Arc::new(Shared::new(ring));
+    (
+        Sender {
+            inner: shared.clone(),
+        },
+        Receiver { inner: shared },
+    )
 }
 
-impl<T, R> Drop for Sender<T, R> {
+pub struct Sender<T, I: Indexer> {
+    inner: Arc<Shared<T, I>>,
+}
+
+impl<T, I: Indexer> Drop for Sender<T, I> {
     fn drop(&mut self) {
         // we need to wake up the receiver before
         // the sender was totally dropped, otherwise the receiver may hang up.
@@ -56,11 +70,11 @@ impl<T, R> Drop for Sender<T, R> {
     }
 }
 
-impl<T, R: Ring<T>> Sender<T, R> {
+impl<T, I: Indexer> Sender<T, I> {
     pub fn start_send(&mut self, item: T) -> Result<(), SendError> {
         if let Some(idx) = self.inner.ring.next_idx() {
             unsafe {
-                self.inner.ring.set(item, idx);
+                self.inner.ring.set_unchecked(item, idx);
             }
             Ok(())
         } else {
@@ -80,7 +94,7 @@ impl<T, R: Ring<T>> Sender<T, R> {
         if self.is_closed() {
             Poll::Ready(Err(SendError::Disconnected))
         } else if self.inner.ring.is_empty() {
-            // if the inner ring is already empty,
+            // if the inner bounded is already empty,
             // we just return ok to avoid some atomic operation.
             Poll::Ready(Ok(()))
         } else {
@@ -97,7 +111,7 @@ impl<T, R: Ring<T>> Sender<T, R> {
         };
 
         unsafe {
-            self.inner.ring.set(item, idx);
+            self.inner.ring.set_unchecked(item, idx);
         }
 
         self.inner.consumer.wake_by_ref();
@@ -131,11 +145,11 @@ impl<T, R: Ring<T>> Sender<T, R> {
     }
 }
 
-pub struct Receiver<T, R> {
-    inner: Arc<Shared<T, R>>,
+pub struct Receiver<T, I: Indexer> {
+    inner: Arc<Shared<T, I>>,
 }
 
-impl<T, R: Ring<T>> Stream for Receiver<T, R> {
+impl<T, I: Indexer> Stream for Receiver<T, I> {
     type Item = T;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -143,11 +157,11 @@ impl<T, R: Ring<T>> Stream for Receiver<T, R> {
     }
 }
 
-impl<T, R: Ring<T>> Receiver<T, R> {
+impl<T, I: Indexer> Receiver<T, I> {
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
         match self.inner.ring.try_pop() {
             None => {
-                // If there is no item in this ring, we need to
+                // If there is no item in this bounded, we need to
                 // check closed and try pop again.
                 //
                 // Consider this situation:

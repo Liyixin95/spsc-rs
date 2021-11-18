@@ -1,10 +1,12 @@
 mod atomic_waker;
-mod error;
-mod loom;
-mod ring;
-pub mod spsc;
-pub mod wrapper;
 
-pub use self::error::SendError;
-pub use self::error::TryRecvError;
-pub use self::error::TrySendError;
+pub mod error;
+
+mod loom;
+
+mod bounded;
+
+pub use self::bounded::{
+    channel, exact_channel, wrapper::SenderWrapper, ExactReceiver, ExactSender, P2Receiver,
+    P2Sender,
+};

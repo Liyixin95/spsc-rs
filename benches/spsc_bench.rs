@@ -1,5 +1,4 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use spsc_rs::spsc;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc as tokio_mpsc;
 
@@ -9,9 +8,9 @@ fn rt() -> Runtime {
 
 fn no_contention_spsc(c: &mut Criterion) {
     let rt = rt();
-    c.bench_function("ring spsc", |b| {
+    c.bench_function("bounded spsc", |b| {
         b.iter(|| {
-            let (mut tx, mut rx) = spsc::channel(4096);
+            let (mut tx, mut rx) = spsc_rs::channel(4096);
 
             let _ = rt.block_on(async move {
                 for i in 0..4096 {
@@ -50,9 +49,9 @@ fn no_contention_mpsc(c: &mut Criterion) {
 }
 
 fn contention_spsc(c: &mut Criterion) {
-    c.bench_function("contention ring spsc", |b| {
+    c.bench_function("contention bounded spsc", |b| {
         b.to_async(rt()).iter(|| async move {
-            let (mut tx, mut rx) = spsc::channel(4096);
+            let (mut tx, mut rx) = spsc_rs::channel(4096);
 
             tokio::spawn(async move {
                 for i in 0..4096 {

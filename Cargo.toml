@@ -23,3 +23,7 @@ loom = { version = "0.5", features = ["futures", "checkpoint"] }
 [[bench]]
 name = "spsc_bench"
 harness = false
+
+[[bench]]
+name = "ring_bench"
+harness = false

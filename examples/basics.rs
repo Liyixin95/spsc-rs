@@ -1,8 +1,6 @@
-use spsc_rs::spsc;
-
 #[tokio::main]
 async fn main() {
-    let (mut tx, mut rx) = spsc::channel(128);
+    let (mut tx, mut rx) = spsc_rs::channel(128);
 
     tokio::spawn(async move {
         for i in 0..10 {
