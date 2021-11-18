@@ -1,4 +1,9 @@
 # Async SPSC Channel
+
+![action badge](https://github.com/Liyixin95/spsc-rs/actions/workflows/ci.yml/badge.svg)
+
+---
+
 Wait-free(even without CAS), async, single-producer single-consumer channel.
 
 # Examples
