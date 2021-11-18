@@ -13,13 +13,13 @@ fn block_on<F: Future>(f: F) -> F::Output {
 }
 
 fn receive_test_framework<R, F, Fut1, Fut2>(amt: u32, cap: usize, sender: F, receiver: R)
-    where
-        F: FnOnce(u32, spsc_rs::P2Sender<u32>) -> Fut1 + Send + 'static,
-        Fut1: Future + Send + 'static,
-        Fut1::Output: Send,
-        R: FnOnce(u32, spsc_rs::P2Receiver<u32>) -> Fut2 + Send + 'static,
-        Fut2: Future + Send + 'static,
-        Fut2::Output: Send,
+where
+    F: FnOnce(u32, spsc_rs::P2Sender<u32>) -> Fut1 + Send + 'static,
+    Fut1: Future + Send + 'static,
+    Fut1::Output: Send,
+    R: FnOnce(u32, spsc_rs::P2Receiver<u32>) -> Fut2 + Send + 'static,
+    Fut2: Future + Send + 'static,
+    Fut2::Output: Send,
 {
     let (tx, rx) = spsc_rs::channel(cap);
     let t = thread::spawn(move || {
