@@ -73,6 +73,7 @@ async fn send_sequence(n: u32, mut sender: spsc_rs::P2Sender<u32>) {
 const COUNT: usize = 100;
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn batch_test() {
     // for _ in 0..COUNT {
     //     receive_test_framework(10000, 2, batch_sequence, receive_sequence);
@@ -92,6 +93,7 @@ fn batch_test() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore)]
 fn spsc_test() {
     for _ in 0..COUNT {
         receive_test_framework(10000, 2, send_sequence, receive_sequence);

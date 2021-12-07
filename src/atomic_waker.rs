@@ -1,5 +1,5 @@
 use crate::loom::UnsafeCell;
-use crate::loom::{AtomicU8, Ordering};
+use crate::loom::{thread, AtomicU8, Ordering};
 use core::ptr;
 use std::task::{RawWaker, RawWakerVTable, Waker};
 
@@ -34,8 +34,9 @@ impl AtomicWaker {
                 // to avoid infinitely wakeup.
                 //
                 // see https://docs.rs/loom/0.5.2/loom/#yielding
-                #[cfg(loom)]
-                loom::thread::yield_now();
+                if_loom! {
+                    thread::yield_now();
+                }
             }
             state => {
                 debug_assert_eq!(state, WAITING);

@@ -2,12 +2,12 @@
 
 use loom::future::block_on;
 use loom::thread;
-use spsc_rs::{spsc, TryRecvError};
+use spsc_rs::error::TryRecvError;
 
 #[test]
 fn send_try_receive() {
     loom::model(|| {
-        let (mut tx, mut rx) = spsc::channel(1);
+        let (mut tx, mut rx) = spsc_rs::channel(1);
         thread::spawn(move || {
             block_on(async move {
                 tx.send(0).await.unwrap();
@@ -38,7 +38,7 @@ fn send_try_receive() {
 #[test]
 fn send_receive() {
     loom::model(|| {
-        let (mut tx, mut rx) = spsc::channel(1);
+        let (mut tx, mut rx) = spsc_rs::channel(1);
 
         thread::spawn(move || {
             block_on(async move {
@@ -60,7 +60,7 @@ fn send_receive() {
 #[test]
 fn closing_tx() {
     loom::model(|| {
-        let (mut tx, mut rx) = spsc::channel(16);
+        let (mut tx, mut rx) = spsc_rs::channel(16);
 
         thread::spawn(move || {
             tx.start_send(()).unwrap();
