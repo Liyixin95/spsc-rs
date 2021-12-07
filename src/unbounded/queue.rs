@@ -74,7 +74,7 @@ impl<T> Queue<T> {
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         unsafe {
-            while let Some(_) = self.try_pop() {}
+            while self.try_pop().is_some() {}
 
             // drop the last block
             self.consumer.with(|ptr| {
@@ -112,7 +112,7 @@ impl<T> Queue<T> {
 
     pub(crate) unsafe fn try_pop(&self) -> Option<T> {
         if self.is_empty() {
-            return None;
+            None
         } else {
             let now = self.consumer_pos.load(Ordering::Acquire);
             let now_idx = now & BLOCK_MASK;
@@ -136,9 +136,9 @@ impl<T> Queue<T> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, loom))]
 mod tests {
-    use super::*;
+    use crate::unbounded::queue::Queue;
     use loom::sync::Arc;
 
     #[cfg(loom)]
@@ -146,7 +146,6 @@ mod tests {
     fn push_pop() {
         loom::model(|| {
             let queue = Arc::new(Queue::new());
-
             let queue1 = queue.clone();
             loom::thread::spawn(move || unsafe {
                 for i in 0..3 {
