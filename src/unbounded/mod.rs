@@ -3,9 +3,12 @@ use crate::error::{SendError, TryRecvError, TrySendError};
 use crate::loom::{Arc, AtomicBool, Ordering};
 use crate::unbounded::queue::Queue;
 use futures_util::future::poll_fn;
+use futures_util::Stream;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 
 mod queue;
+pub mod wrapper;
 
 pub fn unbounded_channel<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
     let shared = Shared {
@@ -31,6 +34,15 @@ pub struct UnboundedSender<T> {
 }
 
 impl<T> UnboundedSender<T> {
+    pub fn start_send(&mut self, t: T) -> Result<(), SendError> {
+        if self.is_closed() {
+            Err(SendError::Disconnected)
+        } else {
+            self.push(t);
+            Ok(())
+        }
+    }
+
     pub fn send(&mut self, t: T) -> Result<(), TrySendError<T>> {
         if self.is_closed() {
             Err(TrySendError {
@@ -38,9 +50,20 @@ impl<T> UnboundedSender<T> {
                 val: t,
             })
         } else {
-            unsafe {
-                self.inner.queue.push(t);
-            }
+            self.push(t);
+            self.inner.consumer.wake_by_ref();
+            Ok(())
+        }
+    }
+
+    pub fn flush(&mut self) -> Result<(), SendError> {
+        if self.is_closed() {
+            Err(SendError::Disconnected)
+        } else if self.inner.queue.is_empty() {
+            // if the inner queue is already empty,
+            // we just return ok to avoid some atomic operation.
+            Ok(())
+        } else {
             self.inner.consumer.wake_by_ref();
             Ok(())
         }
@@ -53,10 +76,25 @@ impl<T> UnboundedSender<T> {
     pub fn close(&mut self) {
         self.inner.closed.store(true, Ordering::Release)
     }
+
+    fn push(&mut self, t: T) {
+        // Safety: The sender can not be cloned, and take mut reference.
+        // So there would only exist one sender, which means we can
+        // safely push to the inner queue.
+        unsafe { self.inner.queue.push(t) }
+    }
 }
 
 pub struct UnboundedReceiver<T> {
     inner: Arc<Shared<T>>,
+}
+
+impl<T> Stream for UnboundedReceiver<T> {
+    type Item = T;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.poll_recv(cx)
+    }
 }
 
 impl<T> UnboundedReceiver<T> {
@@ -120,7 +158,7 @@ impl<T> UnboundedReceiver<T> {
     fn try_pop(&mut self) -> Option<T> {
         // Safety: The receiver can not be cloned, and take mut reference.
         // So there would only exist one receiver, which means we can
-        // safely pop from inner queue.
+        // safely pop from the inner queue.
         unsafe { self.inner.queue.try_pop() }
     }
 }

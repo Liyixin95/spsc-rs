@@ -14,4 +14,6 @@ pub use self::bounded::{
 
 mod unbounded;
 
-pub use self::unbounded::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+pub use self::unbounded::{
+    unbounded_channel, wrapper::UnboundedSenderWrapper, UnboundedReceiver, UnboundedSender,
+};
