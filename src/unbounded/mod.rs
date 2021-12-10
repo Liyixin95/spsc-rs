@@ -33,6 +33,15 @@ pub struct UnboundedSender<T> {
     inner: Arc<Shared<T>>,
 }
 
+impl<T> Drop for UnboundedSender<T> {
+    fn drop(&mut self) {
+        // we need to wake up the receiver before
+        // the sender was totally dropped, otherwise the receiver may hang up.
+        self.inner.closed.store(true, Ordering::Release);
+        self.inner.consumer.wake_by_ref();
+    }
+}
+
 impl<T> UnboundedSender<T> {
     pub fn start_send(&mut self, t: T) -> Result<(), SendError> {
         if self.is_closed() {
@@ -102,7 +111,24 @@ impl<T> UnboundedReceiver<T> {
         poll_fn(|cx| self.poll_recv(cx)).await
     }
 
-    pub fn try_receive(&mut self) -> Result<T, TryRecvError> {
+    pub fn poll_want_recv(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        if self.is_closed() {
+            return Poll::Ready(());
+        }
+
+        self.inner.consumer.register(cx.waker());
+        if self.inner.queue.is_empty() {
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
+    }
+
+    pub async fn want_recv(&mut self) {
+        poll_fn(|cx| self.poll_want_recv(cx)).await
+    }
+
+    pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
         match self.try_pop() {
             None => {
                 // If there is no item in this bounded, we need to

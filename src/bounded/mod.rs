@@ -104,6 +104,10 @@ impl<T, I: Indexer> Sender<T, I> {
         }
     }
 
+    pub async fn flush(&mut self) -> Result<(), SendError> {
+        poll_fn(|cx| self.poll_flush(cx)).await
+    }
+
     pub async fn send(&mut self, item: T) -> Result<(), TrySendError<T>> {
         let idx = match poll_fn(|cx| self.poll_next_pos(cx)).await {
             Ok(idx) => idx,

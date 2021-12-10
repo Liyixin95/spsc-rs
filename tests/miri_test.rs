@@ -52,9 +52,9 @@ fn unbounded_send_receive() {
     tx.send([1; 8]).unwrap();
     tx.send([1; 8]).unwrap();
 
-    let _ = rx.try_receive().unwrap();
-    let _ = rx.try_receive().unwrap();
-    let _ = rx.try_receive().unwrap();
+    let _ = rx.try_recv().unwrap();
+    let _ = rx.try_recv().unwrap();
+    let _ = rx.try_recv().unwrap();
 
     // multi block in this channel
     let (mut tx, mut rx) = spsc_rs::unbounded_channel();
@@ -64,6 +64,6 @@ fn unbounded_send_receive() {
     }
 
     for _ in 0..100 {
-        let _ = rx.try_receive().unwrap();
+        let _ = rx.try_recv().unwrap();
     }
 }

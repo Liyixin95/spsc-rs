@@ -58,6 +58,10 @@ pub(crate) struct Queue<T> {
     consumer_pos: AtomicUsize,
 }
 
+unsafe impl<T: Send> Send for Queue<T> {}
+
+unsafe impl<T: Send> Sync for Queue<T> {}
+
 impl<T> Queue<T> {
     pub(crate) fn new() -> Self {
         let block = Box::new(Block::new_uninit());
