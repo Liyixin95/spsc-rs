@@ -82,10 +82,6 @@ impl<T> UnboundedSender<T> {
         self.inner.closed.load(Ordering::Acquire)
     }
 
-    pub fn close(&mut self) {
-        self.inner.closed.store(true, Ordering::Release)
-    }
-
     fn push(&mut self, t: T) {
         // Safety: The sender can not be cloned, and take mut reference.
         // So there would only exist one sender, which means we can
@@ -96,6 +92,12 @@ impl<T> UnboundedSender<T> {
 
 pub struct UnboundedReceiver<T> {
     inner: Arc<Shared<T>>,
+}
+
+impl<T> Drop for UnboundedReceiver<T> {
+    fn drop(&mut self) {
+        self.close()
+    }
 }
 
 impl<T> Stream for UnboundedReceiver<T> {

@@ -153,6 +153,12 @@ pub struct Receiver<T, I: Indexer> {
     inner: Arc<Shared<T, I>>,
 }
 
+impl<T, I: Indexer> Drop for Receiver<T, I> {
+    fn drop(&mut self) {
+        self.close()
+    }
+}
+
 impl<T, I: Indexer> Stream for Receiver<T, I> {
     type Item = T;
 
