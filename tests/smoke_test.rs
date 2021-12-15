@@ -4,9 +4,8 @@ use spsc_rs::SenderWrapper;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::{hint, thread};
-use std::thread::park_timeout;
 use std::time::{Duration, Instant};
+use std::{hint, thread};
 use tokio::runtime::Builder;
 
 fn block_on<F: Future>(f: F) -> F::Output {
