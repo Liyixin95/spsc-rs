@@ -233,6 +233,10 @@ impl<T, I: Indexer> Receiver<T, I> {
         self.inner.closed.load(Ordering::Acquire)
     }
 
+    pub fn close(&mut self) {
+        self.inner.closed.store(true, Ordering::Release)
+    }
+
     fn poll_next_msg(&self) -> Poll<T> {
         match self.inner.ring.try_pop() {
             None => Poll::Pending,
