@@ -5,7 +5,7 @@ use loom::thread;
 use spsc_rs::error::TryRecvError;
 
 #[test]
-fn send_try_receive() {
+fn bounded_send_try_recv() {
     loom::model(|| {
         let (mut tx, mut rx) = spsc_rs::channel(1);
         thread::spawn(move || {
@@ -36,7 +36,7 @@ fn send_try_receive() {
 }
 
 #[test]
-fn send_receive() {
+fn bounded_send_receive() {
     loom::model(|| {
         let (mut tx, mut rx) = spsc_rs::channel(1);
 
@@ -58,7 +58,7 @@ fn send_receive() {
 }
 
 #[test]
-fn closing_tx() {
+fn bounded_closing_tx() {
     loom::model(|| {
         let (mut tx, mut rx) = spsc_rs::channel(16);
 
