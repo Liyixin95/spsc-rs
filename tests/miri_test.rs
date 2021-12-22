@@ -1,6 +1,6 @@
-use futures_util::task::noop_waker;
+
 use spsc_rs::error::SendError;
-use std::task::{Context, Poll};
+
 
 #[test]
 fn bounded_drop_test() {
