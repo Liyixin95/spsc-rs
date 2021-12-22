@@ -30,7 +30,6 @@ where
     let tx_complete1 = tx_complete.clone();
 
     let t = thread::spawn(move || {
-        //tokio's runtime can not be used in miri
         let ret = block_on(sender(amt, tx));
         tx_complete1.store(true, Ordering::Release);
         ret

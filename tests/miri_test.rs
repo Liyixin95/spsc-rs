@@ -1,3 +1,7 @@
+use futures_util::task::noop_waker;
+use spsc_rs::error::SendError;
+use std::task::{Context, Poll};
+
 #[test]
 fn bounded_drop_test() {
     let (mut tx, rx) = spsc_rs::channel(64);
@@ -16,6 +20,23 @@ fn bounded_send_receive() {
     tx.start_send([1; 8]).unwrap();
     tx.start_send([1; 8]).unwrap();
     tx.start_send([1; 8]).unwrap();
+
+    let _ = rx.try_recv().unwrap();
+    let _ = rx.try_recv().unwrap();
+    let _ = rx.try_recv().unwrap();
+}
+
+#[test]
+fn bounded_close_test() {
+    let (mut tx, mut rx) = spsc_rs::channel(64);
+
+    tx.start_send([1; 8]).unwrap();
+    tx.start_send([1; 8]).unwrap();
+    tx.start_send([1; 8]).unwrap();
+
+    rx.close();
+
+    matches!(tx.start_send([1; 8]), Err(SendError::Disconnected));
 
     let _ = rx.try_recv().unwrap();
     let _ = rx.try_recv().unwrap();
@@ -66,4 +87,21 @@ fn unbounded_send_receive() {
     for _ in 0..100 {
         let _ = rx.try_recv().unwrap();
     }
+}
+
+#[test]
+fn unbounded_close_test() {
+    let (mut tx, mut rx) = spsc_rs::unbounded_channel();
+
+    tx.start_send([1; 8]).unwrap();
+    tx.start_send([1; 8]).unwrap();
+    tx.start_send([1; 8]).unwrap();
+
+    rx.close();
+
+    matches!(tx.start_send([1; 8]), Err(SendError::Disconnected));
+
+    let _ = rx.try_recv().unwrap();
+    let _ = rx.try_recv().unwrap();
+    let _ = rx.try_recv().unwrap();
 }

@@ -72,6 +72,10 @@ impl<T, I: Indexer> Drop for Sender<T, I> {
 
 impl<T, I: Indexer> Sender<T, I> {
     pub fn start_send(&mut self, item: T) -> Result<(), SendError> {
+        if self.is_closed() {
+            return Err(SendError::Disconnected);
+        }
+
         if let Some(idx) = self.inner.ring.next_idx() {
             unsafe {
                 self.inner.ring.set_unchecked(item, idx);

@@ -12,7 +12,10 @@ impl<T> Sink<T> for UnboundedSenderWrapper<T> {
     type Error = SendError;
 
     fn poll_ready(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+        self.inner
+            .as_ref()
+            .and_then(|sender| (!sender.is_closed()).then(|| Poll::Ready(Ok(()))))
+            .unwrap_or(Poll::Ready(Err(SendError::Disconnected)))
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
