@@ -43,15 +43,6 @@ impl<T> Drop for UnboundedSender<T> {
 }
 
 impl<T> UnboundedSender<T> {
-    pub fn start_send(&mut self, t: T) -> Result<(), SendError> {
-        if self.is_closed() {
-            Err(SendError::Disconnected)
-        } else {
-            self.push(t);
-            Ok(())
-        }
-    }
-
     pub fn send(&mut self, t: T) -> Result<(), TrySendError<T>> {
         if self.is_closed() {
             Err(TrySendError {
@@ -60,19 +51,6 @@ impl<T> UnboundedSender<T> {
             })
         } else {
             self.push(t);
-            self.inner.consumer.wake_by_ref();
-            Ok(())
-        }
-    }
-
-    pub fn flush(&mut self) -> Result<(), SendError> {
-        if self.is_closed() {
-            Err(SendError::Disconnected)
-        } else if self.inner.queue.is_empty() {
-            // if the inner queue is already empty,
-            // we just return ok to avoid some atomic operation.
-            Ok(())
-        } else {
             self.inner.consumer.wake_by_ref();
             Ok(())
         }

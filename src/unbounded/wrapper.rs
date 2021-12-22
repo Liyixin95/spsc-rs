@@ -21,15 +21,12 @@ impl<T> Sink<T> for UnboundedSenderWrapper<T> {
     fn start_send(mut self: Pin<&mut Self>, item: T) -> Result<(), Self::Error> {
         self.inner
             .as_mut()
-            .map(|sender| sender.start_send(item))
+            .map(|sender| sender.send(item).map_err(|err| err.into_send_error()))
             .unwrap_or(Err(SendError::Disconnected))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner
-            .as_mut()
-            .map(|sender| Poll::Ready(sender.flush()))
-            .unwrap_or(Poll::Ready(Err(SendError::Disconnected)))
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
