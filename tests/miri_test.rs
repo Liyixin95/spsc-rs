@@ -1,6 +1,4 @@
-
 use spsc_rs::error::SendError;
-
 
 #[test]
 fn bounded_drop_test() {
