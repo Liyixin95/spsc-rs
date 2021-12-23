@@ -91,13 +91,13 @@ fn unbounded_send_receive() {
 fn unbounded_close_test() {
     let (mut tx, mut rx) = spsc_rs::unbounded_channel();
 
-    tx.start_send([1; 8]).unwrap();
-    tx.start_send([1; 8]).unwrap();
-    tx.start_send([1; 8]).unwrap();
+    tx.send([1; 8]).unwrap();
+    tx.send([1; 8]).unwrap();
+    tx.send([1; 8]).unwrap();
 
     rx.close();
 
-    matches!(tx.start_send([1; 8]), Err(SendError::Disconnected));
+    matches!(tx.send([1; 8]), Err(e) if e.is_disconnected());
 
     let _ = rx.try_recv().unwrap();
     let _ = rx.try_recv().unwrap();
