@@ -98,7 +98,7 @@ async fn send_sequence(n: u32, mut sender: spsc_rs::P2Sender<u32>) {
     }
 }
 
-const COUNT: usize = 1000;
+const COUNT: usize = 100;
 
 #[test]
 #[cfg_attr(miri, ignore)]
